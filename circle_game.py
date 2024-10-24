@@ -4,10 +4,17 @@ import numpy as np
 import libs.transformations as tr
 from libs.easy_shaders import SimpleModelViewProjectionShaderProgram, SimpleTextureShaderProgram
 import libs.gpu_shape as gp
-from libs.basic_shapes import Shape
 from time import time
 from PIL import Image
 
+class Shape:
+    def __init__(self, vertices, indices):
+        self.vertices = vertices
+        self.indices = indices
+
+    def __str__(self):
+        return "vertices: " + str(self.vertices) + "\n"\
+            "indices: " + str(self.indices)
 
 # GL SETUP
 win = pyglet.window.Window(700,700)
@@ -36,7 +43,7 @@ glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
 
-image = Image.open("assets\\background.png")
+image = Image.open("assets/background.png")
 image_data = np.array(image.convert("RGBA"))
 glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image_data.shape[1], image_data.shape[0], 0, GL_RGBA, GL_UNSIGNED_BYTE, image_data)
 glUniform1i(glGetUniformLocation(tex_program.shaderProgram, "samplerTex"), 0)
