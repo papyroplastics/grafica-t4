@@ -69,7 +69,6 @@ red_car_color = np.array((0.8, 0.35, 0.35,
                           0.7, 0.7, 0.7, 
                           0.5, 0.5, 0.5) * 24 + (0.7, 0.3, 0.3, 0.6, 0.4, 0.4)).reshape((98,3))
 
-#car_shade = np.hstack((car_verts, np.zeros((98,3), dtype=np.float32))).reshape((98*6))
 blue_car_verts = np.hstack((car_verts, blue_car_color)).reshape((98*6))
 red_car_verts = np.hstack((car_verts, red_car_color)).reshape((98*6))
 
@@ -98,10 +97,7 @@ squere = gp.createGPUShape(program, Shape(squere_verts, squere_inds))
 
 # DYNAMIC OBJECT
 circle_bbox = [np.array([-1.1,1.1]), np.array([-1.1,-1.1]), np.array([1.1,-1.1]), np.array([1.1,1.1])]
-l = 1.578
-fast_squere_bbox = [np.array([-l,l]), np.array([-l,-l]), np.array([l,-l]), np.array([l,l])]
-l = 0.7
-squere_bbox = [np.array([-l,l]), np.array([-l,-l]), np.array([l,-l]), np.array([l,l])]
+squere_bbox = np.array([[-0.7, 0.7, 0.7, -0.7], [-0.7, -0.7, 0.7, 0.7]])
 
 class Player:
     def __init__(self, x, y, gpushape):
@@ -111,6 +107,9 @@ class Player:
         self.dash_cd = time()
         self.squere_dc = time()
         self.gpushape = gpushape
+        self.num = 0
+        self.rot_speeds = [2, -6, 4, -1, 7, 2, -5]
+        self.next_rot = 0
 
     def update_pos(self, dt, destination):
         self.speed *= 0.97
@@ -135,10 +134,13 @@ class Player:
             if direction[0] != 0:
                 direction /= np.linalg.norm(direction)
                 angle = np.arctan(direction[1]/direction[0])
-                squere_list.append(SquereBlock(*(self.pos + direction*3), angle, (direction+self.speed)*6))
+                squere_list.append(SquereBlock(*(self.pos + direction*3),angle, (direction+self.speed)*6,
+                                               self.rot_speeds[self.next_rot%7]))
             elif direction[1] != 0:
                 direction /= np.linalg.norm(direction)
-                squere_list.append(SquereBlock(*(self.pos + direction*3), 0, (direction+self.speed)*6))
+                squere_list.append(SquereBlock(*(self.pos + direction*3), 0, (direction+self.speed)*6),
+                                               self.rot_speeds[self.next_rot%7])
+            self.next_rot += 1
             self.squere_dc = time()
 
     def draw(self):
@@ -166,51 +168,40 @@ class Player:
                     enemy.speed -= speed_change
                     break
     
-    def fast_cube_colision(self, cube):
-        dif = cube.pos - self.pos
-        for point in fast_squere_bbox:
-            x, y = np.abs(dif + point)
-            if x < 1.578 and y < 1.578:
-                self.cube_colision(cube, dif)
-                break
+    def check_squere_colision(self, squere):
+        dif = squere.pos - self.pos
+        dist = np.abs(dif)
+        dist = np.max(dist)
+        if dist < 2.1:
+            self.squere_colision(squere, dif)
 
-    def cube_colision(self, cube, dif):
-        poss = []
-        diffs = []
-        for point in squere_bbox:
-            point_pos = cube.pos + cube.rotmat[:2,:2] @ point
-            poss.append(point_pos)
-            dif_to_point = np.linalg.norm(point_pos - self.pos)
-            diffs.append(dif_to_point)
-
-        ind1 = diffs.index(min(diffs))
-        a = diffs.pop(ind1)
-        ind2 = diffs.index(min(diffs))
-        b = diffs[ind2]
-        c = 1.4
-        
-
-        s = (a+b+c)/2
-        area = np.sqrt(s*(s-a)*(s-b)*(s-c))
-        dist = 2 * area / c
-
-        if dist < 1.1:
+    def squere_colision(self, squere, dif):
+        squere_verts = squere.pos.reshape(2,1) + squere.rotmat[:2,:2] @ squere_bbox
+        difs = (squere_verts - self.pos.reshape(2,1))
+        sqr_norms = np.sum(difs**2, axis=0)
+        small_inds = np.argsort(sqr_norms)[:2]
+        norms = np.linalg.norm(difs[:,small_inds], axis=0)
+        s = 0.7 + norms.sum() / 2
+        a_squared = np.prod([s, s-1.4, *s-norms])
+        if a_squared < 0.593:
             dif_norm = np.dot(dif,dif)
             speed_change = np.zeros(2)
             player_sp_proj = np.dot(dif, self.speed)
-            cube_sp_proj = np.dot(dif, enemy.speed)
+            squere_sp_proj = np.dot(dif, enemy.speed)
 
             if player_sp_proj > 0:
                 speed_change -= player_sp_proj * dif / dif_norm
-            if cube_sp_proj < 0:
-                speed_change += cube_sp_proj * dif / dif_norm
+            if squere_sp_proj < 0:
+                speed_change += squere_sp_proj * dif / dif_norm
             self.speed += speed_change * 0.4
-            cube.speed -= speed_change * 1.5
+            squere.speed -= speed_change * 1.5
 
-            if ind1 == ind2-1:
-                cube.rot += speed_change[0] * 0.5
+            change = np.linalg.norm(speed_change) * 0.5
+            if small_inds[0] > small_inds[1] or (small_inds[0] == 0 and small_inds[1] == 3):
+                squere.rot += change
             else:
-                cube.rot -= speed_change[0] * 0.5
+                squere.rot -= change
+
 
 class Enemy(Player):
     def __init__(self, x, y, gpushape):
@@ -243,12 +234,12 @@ class Enemy(Player):
 
 
 class SquereBlock:
-    def __init__(self, x, y, angle, speed): 
+    def __init__(self, x, y, angle=0, speed=np.zeros(2,dtype=np.float32), rotation=0): 
         self.pos = np.array([x, y], dtype=np.float32)
-        self.speed = np.array(speed, dtype=np.float32)
+        self.speed = speed
         self.acc = np.zeros(2, dtype=np.float32)
         self.angle = angle
-        self.rot = (np.random.random_sample() * 3 + 1) * np.random.choice(np.array([-1,1]))
+        self.rot = rotation
         self.rotmat = tr.identity()
     
     def update(self, dt):
@@ -262,17 +253,17 @@ class SquereBlock:
         model = tr.translate(*self.pos,0) @ self.rotmat
         glUniformMatrix4fv(model_loc, 1, GL_TRUE, model)
         program.drawCall(squere)
-    
-    def fast_cube_colision(self, other):
-        dif = other.pos - self.pos
-        for point in fast_squere_bbox:
-            x, y = np.abs(dif + point)
-            if x < 1.578 and y < 1.578:
-                self.cube_colision(other, dif)
-                break
-                 
-    def cube_colision(self, other, dif):
-        for point in squere_bbox:
+
+    def check_squere_colision(self, other):
+        if self is not other:
+            dif = other.pos - self.pos
+            dist = np.abs(dif)
+            dist = np.max(dist)
+            if dist < 2:
+                self.squere_colision(other, dif)
+
+    def squere_colision(self, other, dif):
+        for point in squere_bbox.T:
             x,y = self.rotmat[:2,:2] @ (other.rotmat[:2,:2] @ point + dif)
             if abs(x) < 0.7 and abs(y) < 0.7:
                 dif_norm = np.dot(dif, dif)
@@ -319,7 +310,6 @@ class SquereBlock:
 
                 break
 
-
 # TRANSFORMS
 model_loc = glGetUniformLocation(program.shaderProgram, "model")
 view_loc = glGetUniformLocation(program.shaderProgram, "view")
@@ -330,7 +320,7 @@ glUniformMatrix4fv(proj_loc, 1, GL_TRUE, PERSPECTIVE)
 glUniformMatrix4fv(view_loc, 1, GL_TRUE, VIEW)
 glUniformMatrix4fv(model_loc, 1, GL_TRUE, tr.identity())
 
-# GLOBAL VARIABLES
+# VARIABLES
 player = Player(0, -6, blue_car)
 enemy = Enemy(0,6, red_car)
 squere_list = []
@@ -345,10 +335,10 @@ def updateScene(dt):
         shape.update(dt)
     player.crash(enemy)
     for shape in squere_list:
-        player.fast_cube_colision(shape)
-        enemy.fast_cube_colision(shape)
+        player.check_squere_colision(shape)
+        enemy.check_squere_colision(shape)
         for shape2 in squere_list:
-            shape.fast_cube_colision(shape2)
+            shape.check_squere_colision(shape2)
 
 @win.event
 def on_draw():
