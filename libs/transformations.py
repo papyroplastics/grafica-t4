@@ -79,6 +79,19 @@ def trigRotationZ(sin_theta, cos_theta):
         [0,0,1,0],
         [0,0,0,1]], dtype = np.float32)
 
+def rotation2D(theta):
+    sin_theta = np.sin(theta)
+    cos_theta = np.cos(theta)
+
+    return np.array([
+        [cos_theta,-sin_theta],
+        [sin_theta, cos_theta]], dtype = np.float32)
+
+def trigRotation2D(sin_theta, cos_theta):
+    return np.array([
+        [cos_theta,-sin_theta],
+        [sin_theta, cos_theta]], dtype = np.float32)
+
 
 def rotationA(theta, axis):
     s = np.sin(theta)

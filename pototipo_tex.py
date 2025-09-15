@@ -95,11 +95,9 @@ glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
 
-image = np.array(Image.open("assets\Kit-Cat.png").convert("RGBA"))
+image = np.array(Image.open("assets\\background.png").convert("RGBA"))
 glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.shape[1], image.shape[0], 0, GL_RGBA, GL_UNSIGNED_BYTE, image)
 glUniform1i(glGetUniformLocation(program, "imageTexture"), 0)
-glGenerateMipmap(GL_TEXTURE_2D) 
-glActiveTexture(GL_TEXTURE0)
 
 # DEFINIR EVENTOS
 
